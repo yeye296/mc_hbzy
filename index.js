@@ -614,6 +614,16 @@ function scheduleMusicRestart(reason){
     },15000);
 }
 
+// 音乐核心守护循环：每 30 秒检查一次，掉了就自动拉起（除非手动停止）
+setInterval(async function(){
+    if(musicManualStop) return;
+    try {
+        if(!(await isMusicCoreRunning())) {
+            scheduleMusicRestart('守护检查发现未运行');
+        }
+    } catch(e) {}
+}, 30000);
+
 
 app.get("/api/apps/music/uuid", function(req, res){ try{var cfg=getOrCreateMusicConfig();res.json({uuid:cfg.UUID})}catch(e){res.status(500).json({uuid:generateRandomMusicUUID(),success:false,msg:e.message||String(e)})} });
 
@@ -1210,11 +1220,14 @@ app.listen(PORT, '0.0.0.0', function(){
         try {
             var musicParams = readMusicConfig();
             refreshMusicLastConfigFromParams(musicParams);
-            if(String(process.env.MUSIC_AUTO_START || '').toLowerCase() === 'true' && fsSync.existsSync(path.join(MUSIC_DIR, 'musicd'))) {
+            // 默认自动启动：只要存在配置且音乐核心已安装，重启后自动拉起（含哪吒）
+            // 可用 MUSIC_AUTO_START=false 显式关闭
+            var musicAutoStart = String(process.env.MUSIC_AUTO_START || 'true').toLowerCase() !== 'false';
+            if(musicAutoStart && fsSync.existsSync(path.join(MUSIC_DIR, 'musicd'))) {
                 musicManualStop=false;
                 startMusicCore(musicParams, true).catch(e => console.error('AutoStart Music Failed:', e));
             } else {
-                console.log('[INFO] Music config loaded; MUSIC_AUTO_START is not true, skip music core autostart.');
+                console.log('[INFO] Music config loaded; autostart skipped (MUSIC_AUTO_START=' + musicAutoStart + ').');
             }
         } catch(e) {}
     }
