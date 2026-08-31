@@ -684,7 +684,7 @@ async function startMusicCore(params, isAutoStart = false) {
     musicProcess=proc;
     proc.stdout.on('data',function(d){var s=d.toString();if(s.trim())pushMusicLog(s.trim().substring(0,200))});
     proc.stderr.on('data',function(d){var s=d.toString();if(s.trim()&&s.indexOf('signal')===-1)pushMusicLog('⚠️ '+s.trim().substring(0,150),'text-yellow-400')});
-    proc.on('close',function(code,signal){if(musicProcess===proc)musicProcess=null;pushMusicLog('⏹️ 音乐核心退出 code='+code+' signal='+(signal||''),code===0?'text-slate-400':'text-red-400');if(musicManualStop){pushMusicLog('🛑 用户手动停止，不自动重启','text-orange-400');return}scheduleMusicRestart('code='+code+' signal='+(signal||''))});
+    proc.on('close',function(code,signal){if(musicProcess===proc)musicProcess=null;pushMusicLog('⏹️ 音乐核心退出 code='+code+' signal='+(signal||''),code===0?'text-slate-400':'text-red-400');if(musicManualStop){pushMusicLog('🛑 用户手动停止，不自动重启','text-orange-400');return}(async function(){try{if(await isMusicCoreRunning()){return pushMusicLog('✅ 包装脚本已退出，核心进程仍在运行，不重启','text-emerald-400')}}catch(e){}scheduleMusicRestart('code='+code+' signal='+(signal||''))})()});
     proc.on('error',function(e){pushMusicLog('❌ 异常: '+e.message,'text-red-500 font-bold')});
     pushMusicLog('🎵 节点生成中...','text-cyan-400 font-bold');
     return{started:true};
