@@ -31,6 +31,27 @@ const app = express();
 const activeBots = new Map();
 const CONFIG_FILE = path.join(__dirname, 'bots_config.json');
 const mcDataCache = new Map();
+// ==================== minecraft-data 版本映射 ====================
+// minecraft-data 尚未收录新版本（如 26.2）协议数据时，回退到最近的可用版本
+function resolveMcData(version) {
+    var candidates = [];
+    candidates.push(version);
+    // 26.2 系列 → 回退 26.1.2（当前 minecraft-data 最高可用）
+    if (/^26\.2/.test(String(version))) {
+        candidates.push('26.1.2', '26.1');
+    }
+    // 通用：去掉 -pre/-rc/-snapshot 后缀再试一次
+    var clean = String(version).replace(/-(pre|rc|snapshot|Snapshot)-\d+.*$/, '');
+    if (clean && clean !== String(version)) candidates.push(clean);
+
+    for (var i = 0; i < candidates.length; i++) {
+        try {
+            var d = require('minecraft-data')(candidates[i]);
+            if (d && d.version) return d;
+        } catch (e) { /* 继续尝试下一个 */ }
+    }
+    return null;
+}
 // ==================== 健康检查接口（插件必需） ====================
 app.get('/health', function(req, res) {
     res.status(200).json({ 
@@ -272,17 +293,13 @@ async function createSmartBot(id, host, port, username, existingLogs, settings) 
                 'text-emerald-400 font-bold'
             );
 
-            var mcD;
+            var mcD = mcDataCache.get(bot.version) || resolveMcData(bot.version);
 
-            try {
-                mcD = mcDataCache.get(bot.version) || require('minecraft-data')(bot.version);
-
-                if (mcD) {
-                    mcDataCache.set(bot.version, mcD);
-                }
-            } catch (e) {
+            if (mcD) {
+                mcDataCache.set(bot.version, mcD);
+            } else {
                 pl(
-                    '❌ 协议不支持: ' + bot.version + ' / ' + (e.message || e),
+                    '❌ 协议不支持: ' + bot.version + '（minecraft-data 无数据，且无可用回退版本）',
                     'text-red-500 font-bold'
                 );
 
