@@ -19,6 +19,41 @@ process.on('unhandledRejection', function(err) {
     console.error('[unhandledRejection]', err && (err.stack || err.message || err));
 });
 
+// ==================== 26.2 协议兼容补丁（minecraft-data / mineflayer 尚未收录 26.2） ====================
+// 三合一：1) 让 md('26.2') 能解析到 26.1 数据；2) 骗过 serializer 协议号检查(776)；
+//         3) 提高 mineflayer 支持版本上限到 26.2
+const Module = require('module');
+const __origLoad = Module._load;
+const __patchedMd = new Set();
+Module._load = function(request, parent, isMain) {
+    const mod = __origLoad.apply(this, arguments);
+    if (request === 'minecraft-data' && mod && typeof mod === 'function' && !__patchedMd.has(mod)) {
+        __patchedMd.add(mod);
+        try {
+            const entry = mod.versionsByMinecraftVersion && mod.versionsByMinecraftVersion.pc && mod.versionsByMinecraftVersion.pc['26.2'];
+            if (entry && entry.majorVersion === '26.2' && !mod('26.2')) {
+                entry.majorVersion = '26.1';
+                const d26 = mod('26.2');
+                if (d26 && d26.version) {
+                    d26.version.version = 776;
+                    d26.version.minecraftVersion = '26.2';
+                }
+                console.log('[compat] minecraft-data 已补丁: 26.2 → 26.1 数据 (协议 776)');
+            }
+        } catch (e) { /* 忽略补丁失败，保持原行为 */ }
+    }
+    return mod;
+};
+try {
+    const __mfVersion = require('mineflayer/lib/version.js');
+    const __tv = __mfVersion.testedVersions;
+    if (Array.isArray(__tv) && __tv[__tv.length - 1] === '26.1') {
+        __tv.push('26.2');
+        __mfVersion.latestSupportedVersion = '26.2';
+        console.log('[compat] mineflayer 支持版本已提升至 26.2');
+    }
+} catch (e) { /* 版本文件结构变化时忽略 */ }
+
 const mineflayer = require("mineflayer");
 const express = require("express");
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
